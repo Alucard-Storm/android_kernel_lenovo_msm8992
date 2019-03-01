@@ -3117,7 +3117,7 @@ find_lively_task_by_vpid(pid_t vpid)
 
 	/* Reuse ptrace permission checks for now. */
 	err = -EACCES;
-	if (!ptrace_may_access(task, PTRACE_MODE_READ_REALCREDS))
+	if (!ptrace_may_access(task, PTRACE_MODE_READ))
 		goto errout;
 
 	return task;
@@ -5898,10 +5898,6 @@ static int perf_tp_filter_match(struct perf_event *event,
 {
 	void *record = data->raw->data;
 
-	/* only top level events have filters set */
-	if (event->parent)
-		event = event->parent;
-
 	if (likely(!event->filter) || filter_match_preds(event->filter, record))
 		return 1;
 	return 0;
@@ -7780,7 +7776,7 @@ int perf_event_init_context(struct task_struct *child, int ctxn)
 		ret = inherit_task_group(event, parent, parent_ctx,
 					 child, ctxn, &inherited_all);
 		if (ret)
-			goto out_unlock;
+			break;
 	}
 
 	/*
@@ -7796,7 +7792,7 @@ int perf_event_init_context(struct task_struct *child, int ctxn)
 		ret = inherit_task_group(event, parent, parent_ctx,
 					 child, ctxn, &inherited_all);
 		if (ret)
-			goto out_unlock;
+			break;
 	}
 
 	raw_spin_lock_irqsave(&parent_ctx->lock, flags);
@@ -7824,7 +7820,6 @@ int perf_event_init_context(struct task_struct *child, int ctxn)
 	}
 
 	raw_spin_unlock_irqrestore(&parent_ctx->lock, flags);
-out_unlock:
 	mutex_unlock(&parent_ctx->mutex);
 
 	perf_unpin_context(parent_ctx);

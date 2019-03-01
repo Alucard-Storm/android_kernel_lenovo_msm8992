@@ -125,16 +125,11 @@ int config_ep_by_speed(struct usb_gadget *g,
 
 ep_found:
 	/* commit results */
-	_ep->maxpacket = usb_endpoint_maxp(chosen_desc) & 0x7ff;
+	_ep->maxpacket = usb_endpoint_maxp(chosen_desc);
 	_ep->desc = chosen_desc;
 	_ep->comp_desc = NULL;
 	_ep->maxburst = 0;
-	_ep->mult = 1;
-
-	if (g->speed == USB_SPEED_HIGH && (usb_endpoint_xfer_isoc(_ep->desc) ||
-				usb_endpoint_xfer_int(_ep->desc)))
-		_ep->mult = ((usb_endpoint_maxp(_ep->desc) & 0x1800) >> 11) + 1;
-
+	_ep->mult = 0;
 	if (!want_comp_desc)
 		return 0;
 
@@ -151,7 +146,7 @@ ep_found:
 		switch (usb_endpoint_type(_ep->desc)) {
 		case USB_ENDPOINT_XFER_ISOC:
 			/* mult: bits 1:0 of bmAttributes */
-			_ep->mult = (comp_desc->bmAttributes & 0x3) + 1;
+			_ep->mult = comp_desc->bmAttributes & 0x3;
 		case USB_ENDPOINT_XFER_BULK:
 		case USB_ENDPOINT_XFER_INT:
 			_ep->maxburst = comp_desc->bMaxBurst + 1;
@@ -186,7 +181,7 @@ int usb_add_function(struct usb_configuration *config,
 {
 	int	value = -EINVAL;
 
-	DBG(config->cdev, "adding '%s'/%pK to config '%s'/%pK\n",
+	DBG(config->cdev, "adding '%s'/%p to config '%s'/%p\n",
 			function->name, function,
 			config->label, config);
 
@@ -220,7 +215,7 @@ int usb_add_function(struct usb_configuration *config,
 
 done:
 	if (value)
-		DBG(config->cdev, "adding '%s'/%pK --> %d\n",
+		DBG(config->cdev, "adding '%s'/%p --> %d\n",
 				function->name, function, value);
 	return value;
 }
@@ -770,7 +765,7 @@ static int set_config(struct usb_composite_dev *cdev,
 
 		result = f->set_alt(f, tmp, 0);
 		if (result < 0) {
-			DBG(cdev, "interface %d (%s/%pK) alt 0 --> %d\n",
+			DBG(cdev, "interface %d (%s/%p) alt 0 --> %d\n",
 					tmp, f->name, f, result);
 
 			reset_config(cdev);
@@ -845,7 +840,7 @@ int usb_add_config(struct usb_composite_dev *cdev,
 	if (!bind)
 		goto done;
 
-	DBG(cdev, "adding config #%u '%s'/%pK\n",
+	DBG(cdev, "adding config #%u '%s'/%p\n",
 			config->bConfigurationValue,
 			config->label, config);
 
@@ -862,7 +857,7 @@ int usb_add_config(struct usb_composite_dev *cdev,
 					struct usb_function, list);
 			list_del(&f->list);
 			if (f->unbind) {
-				DBG(cdev, "unbind function '%s'/%pK\n",
+				DBG(cdev, "unbind function '%s'/%p\n",
 					f->name, f);
 				f->unbind(config, f);
 				/* may free memory for "f" */
@@ -873,7 +868,7 @@ int usb_add_config(struct usb_composite_dev *cdev,
 	} else {
 		unsigned	i;
 
-		DBG(cdev, "cfg %d/%pK speeds:%s%s%s\n",
+		DBG(cdev, "cfg %d/%p speeds:%s%s%s\n",
 			config->bConfigurationValue, config,
 			config->superspeed ? " super" : "",
 			config->highspeed ? " high" : "",
@@ -888,7 +883,7 @@ int usb_add_config(struct usb_composite_dev *cdev,
 
 			if (!f)
 				continue;
-			DBG(cdev, "  interface %d = %s/%pK\n",
+			DBG(cdev, "  interface %d = %s/%p\n",
 				i, f->name, f);
 		}
 	}
@@ -916,13 +911,13 @@ static void unbind_config(struct usb_composite_dev *cdev,
 				struct usb_function, list);
 		list_del(&f->list);
 		if (f->unbind) {
-			DBG(cdev, "unbind function '%s'/%pK\n", f->name, f);
+			DBG(cdev, "unbind function '%s'/%p\n", f->name, f);
 			f->unbind(config, f);
 			/* may free memory for "f" */
 		}
 	}
 	if (config->unbind) {
-		DBG(cdev, "unbind config '%s'/%pK\n", config->label, config);
+		DBG(cdev, "unbind config '%s'/%p\n", config->label, config);
 		config->unbind(config);
 			/* may free memory for "c" */
 	}
@@ -1442,7 +1437,9 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		value = min(w_length, (u16) 1);
 		break;
 
-	/* function drivers must handle get/set altsetting */
+	/* function drivers must handle get/set altsetting; if there's
+	 * no get() method, we know only altsetting zero works.
+	 */
 	case USB_REQ_SET_INTERFACE:
 		if (ctrl->bRequestType != USB_RECIP_INTERFACE)
 			goto unknown;
@@ -1451,13 +1448,7 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		f = cdev->config->interface[intf];
 		if (!f)
 			break;
-
-		/*
-		 * If there's no get_alt() method, we know only altsetting zero
-		 * works. There is no need to check if set_alt() is not NULL
-		 * as we check this in usb_add_function().
-		 */
-		if (w_value && !f->get_alt)
+		if (w_value && !f->set_alt)
 			break;
 		/*
 		 * We put interfaces in default settings (alt 0)
@@ -1665,8 +1656,6 @@ static DEVICE_ATTR(suspended, 0444, composite_show_suspended, NULL);
 static void __composite_unbind(struct usb_gadget *gadget, bool unbind_driver)
 {
 	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
-	struct usb_gadget_strings	*gstr = cdev->driver->strings[0];
-	struct usb_string		*dev_str = gstr->strings;
 
 	/* composite_disconnect() must already have been called
 	 * by the underlying peripheral controller driver!
@@ -1686,9 +1675,6 @@ static void __composite_unbind(struct usb_gadget *gadget, bool unbind_driver)
 		cdev->driver->unbind(cdev);
 
 	composite_dev_cleanup(cdev);
-
-	if (dev_str[USB_GADGET_MANUFACTURER_IDX].s == cdev->def_manufacturer)
-		dev_str[USB_GADGET_MANUFACTURER_IDX].s = "";
 
 	kfree(cdev->def_manufacturer);
 	kfree(cdev);

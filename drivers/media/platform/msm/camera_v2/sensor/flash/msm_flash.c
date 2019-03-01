@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2015, 2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -281,7 +281,7 @@ void msm_torch_brightness_set(struct led_classdev *led_cdev, enum led_brightness
         return;
     }
     
-	led_trigger_event(torch_trigger, value);
+    led_trigger_event(torch_trigger, value);
 };
 
 static struct led_classdev msm_torch_led[MAX_LED_TRIGGERS] = {
@@ -299,32 +299,32 @@ static struct led_classdev msm_torch_led[MAX_LED_TRIGGERS] = {
 
 static int32_t msm_torch_create_classdev(struct platform_device *pdev, void *data)
 {
-	int32_t rc = 0;
-	int32_t i = 0;
-	struct msm_flash_ctrl_t *fctrl = (struct msm_flash_ctrl_t *)data;
-
-	if (!fctrl) {
-		pr_err("Invalid fctrl\n");
-		return -EINVAL;
-	}
-
-	for (i = 0; i < fctrl->torch_num_sources; i++) {
-		if (fctrl->torch_trigger[i]) {
-			CDBG("%s:%d SET value %d for torch", __func__, __LINE__, i);
-			msm_torch_brightness_init_led(fctrl->torch_trigger[i], LED_OFF);
+    int32_t rc = 0;
+    int32_t i = 0;
+    struct msm_flash_ctrl_t *fctrl = (struct msm_flash_ctrl_t *)data;
+    
+    if (!fctrl) {
+        pr_err("Invalid fctrl\n");
+        return -EINVAL;
+    }
+    
+    for (i = 0; i < fctrl->torch_num_sources; i++) {
+        if (fctrl->torch_trigger[i]) {
+            CDBG("%s:%d SET value %d for torch", __func__, __LINE__, i);
+            msm_torch_brightness_init_led(fctrl->torch_trigger[i], LED_OFF);
             
-			rc = led_classdev_register(&pdev->dev, &msm_torch_led[i]);
-			if (rc) {
-				pr_err("Failed to register %d led dev. rc = %d\n", i, rc);
-				return rc;
-			}
-		} else {
-			pr_err("Invalid fctrl->torch_trigger[%d]\n", i);
-			return -EINVAL;
-		}
-	}
-
-	return 0;
+            rc = led_classdev_register(&pdev->dev, &msm_torch_led[i]);
+            if (rc) {
+                pr_err("Failed to register %d led dev. rc = %d\n", i, rc);
+                return rc;
+            }
+        } else {
+            pr_err("Invalid fctrl->torch_trigger[%d]\n", i);
+            return -EINVAL;
+        }
+    }
+    
+    return 0;
 };
 
 static int32_t msm_flash_get_subdev_id(
@@ -357,12 +357,6 @@ static int32_t msm_flash_i2c_write_table(
 	conf_array.delay = settings->delay;
 	conf_array.reg_setting = settings->reg_setting_a;
 	conf_array.size = settings->size;
-
-	/* Validate the settings size */
-	if((!conf_array.size) || (conf_array.size > MAX_I2C_REG_SET)) {
-		pr_err("failed: invalid size %d", conf_array.size);
-		return -EINVAL;
-	}
 
 	return flash_ctrl->flash_i2c_client.i2c_func_tbl->i2c_write_table(
 		&flash_ctrl->flash_i2c_client, &conf_array);
@@ -748,64 +742,6 @@ static int32_t msm_flash_low_2(
 #endif
 /*+End xujt1 add debug port for led flash driver 2015-04-08*/
 
-static int32_t msm_flash_init_prepare(
-	struct msm_flash_ctrl_t *flash_ctrl,
-	struct msm_flash_cfg_data_t *flash_data)
-{
-#ifdef CONFIG_COMPAT
-	struct msm_flash_cfg_data_t flash_data_k;
-	struct msm_flash_init_info_t flash_init_info;
-	int32_t i = 0;
-	if(!is_compat_task()) {
-		/*for 64-bit usecase,it need copy the data to local memory*/
-		flash_data_k.cfg_type = flash_data->cfg_type;
-		for (i = 0; i < MAX_LED_TRIGGERS; i++) {
-			flash_data_k.flash_current[i] =
-				flash_data->flash_current[i];
-			flash_data_k.flash_duration[i] =
-				flash_data->flash_duration[i];
-		}
-
-		flash_data_k.cfg.flash_init_info = &flash_init_info;
-		if (copy_from_user(&flash_init_info,
-			(void *)(flash_data->cfg.flash_init_info),
-			sizeof(struct msm_flash_init_info_t))) {
-			pr_err("%s copy_from_user failed %d\n",
-				__func__, __LINE__);
-			return -EFAULT;
-		}
-		return msm_flash_init(flash_ctrl, &flash_data_k);
-	}
-	/*
-	 * for 32-bit usecase,it already copy the userspace
-	 * data to local memory in msm_flash_subdev_do_ioctl()
-	 * so here do not need copy from user
-	 */
-	return msm_flash_init(flash_ctrl, flash_data);
-#else
-	struct msm_flash_cfg_data_t flash_data_k;
-	struct msm_flash_init_info_t flash_init_info;
-	int32_t i = 0;
-	flash_data_k.cfg_type = flash_data->cfg_type;
-	for (i = 0; i < MAX_LED_TRIGGERS; i++) {
-		flash_data_k.flash_current[i] =
-			flash_data->flash_current[i];
-		flash_data_k.flash_duration[i] =
-			flash_data->flash_duration[i];
-	}
-
-	flash_data_k.cfg.flash_init_info = &flash_init_info;
-	if (copy_from_user(&flash_init_info,
-		(void *)(flash_data->cfg.flash_init_info),
-		sizeof(struct msm_flash_init_info_t))) {
-		pr_err("%s copy_from_user failed %d\n",
-			__func__, __LINE__);
-		return -EFAULT;
-	}
-	return msm_flash_init(flash_ctrl, &flash_data_k);
-#endif
-}
-
 static int32_t msm_flash_low(
 	struct msm_flash_ctrl_t *flash_ctrl,
 	struct msm_flash_cfg_data_t *flash_data)
@@ -909,7 +845,7 @@ static int32_t msm_flash_config(struct msm_flash_ctrl_t *flash_ctrl,
 
 	switch (flash_data->cfg_type) {
 	case CFG_FLASH_INIT:
-		rc = msm_flash_init_prepare(flash_ctrl, flash_data);
+		rc = msm_flash_init(flash_ctrl, flash_data);
 		break;
 	case CFG_FLASH_RELEASE:
 		if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)
@@ -1327,9 +1263,6 @@ static long msm_flash_subdev_do_ioctl(
 			break;
 		}
 		break;
-	case VIDIOC_MSM_FLASH_CFG:
-		pr_err("invalid cmd 0x%x received\n", cmd);
-		return -EINVAL;
 	default:
 		return msm_flash_subdev_ioctl(sd, cmd, arg);
 	}

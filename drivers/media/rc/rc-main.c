@@ -702,28 +702,16 @@ EXPORT_SYMBOL_GPL(rc_keydown_notimeout);
 static int ir_open(struct input_dev *idev)
 {
 	struct rc_dev *rdev = input_get_drvdata(idev);
-	int rc = 0;
 
-	mutex_lock(&rdev->lock);
-	if (!rdev->open_count++)
-		rc = rdev->open(rdev);
-	if (rc < 0)
-		rdev->open_count--;
-	mutex_unlock(&rdev->lock);
-
-	return rc;
+	return rdev->open(rdev);
 }
 
 static void ir_close(struct input_dev *idev)
 {
 	struct rc_dev *rdev = input_get_drvdata(idev);
 
-	if (rdev) {
-		mutex_lock(&rdev->lock);
-		if (!--rdev->open_count)
-			rdev->close(rdev);
-		mutex_unlock(&rdev->lock);
-	}
+	 if (rdev)
+		rdev->close(rdev);
 }
 
 /* class for /sys/class/rc */
@@ -954,6 +942,9 @@ static void rc_dev_release(struct device *device)
 static int rc_dev_uevent(struct device *device, struct kobj_uevent_env *env)
 {
 	struct rc_dev *dev = to_rc_dev(device);
+
+	if (!dev || !dev->input_dev)
+		return -ENODEV;
 
 	if (dev->rc_map.name)
 		ADD_HOTPLUG_VAR("NAME=%s", dev->rc_map.name);

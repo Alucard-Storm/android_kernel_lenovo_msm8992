@@ -432,6 +432,9 @@ extern struct cpufreq_governor cpufreq_gov_conservative;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_INTERACTIVE)
 extern struct cpufreq_governor cpufreq_gov_interactive;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_interactive)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_ELEMENTALX)
+extern struct cpufreq_governor cpufreq_gov_elementalx;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_elementalx)
 #endif
 
 /*********************************************************************
@@ -488,6 +491,9 @@ static inline int cpufreq_generic_exit(struct cpufreq_policy *policy)
  *                         CPUFREQ STATS                             *
  *********************************************************************/
 
+#ifdef CONFIG_CPU_FREQ_STAT
 void acct_update_power(struct task_struct *p, cputime_t cputime);
-
+#else
+static inline void acct_update_power(struct task_struct *p, cputime_t cputime) {}
+#endif
 #endif /* _LINUX_CPUFREQ_H */

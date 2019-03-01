@@ -266,7 +266,7 @@ static void nuke(struct dummy *dum, struct dummy_ep *ep)
 /* caller must hold lock */
 static void stop_activity(struct dummy *dum)
 {
-	int i;
+	struct dummy_ep	*ep;
 
 	/* prevent any more requests */
 	dum->address = 0;
@@ -274,8 +274,8 @@ static void stop_activity(struct dummy *dum)
 	/* The timer is left running so that outstanding URBs can fail */
 
 	/* nuke any pending requests first, so driver i/o is quiesced */
-	for (i = 0; i < DUMMY_ENDPOINTS; ++i)
-		nuke(dum, &dum->ep[i]);
+	list_for_each_entry(ep, &dum->gadget.ep_list, ep.ep_list)
+		nuke(dum, ep);
 
 	/* driver now does any non-usb quiescing necessary */
 }
@@ -637,7 +637,7 @@ static int dummy_queue(struct usb_ep *_ep, struct usb_request *_req,
 		return -ESHUTDOWN;
 
 #if 0
-	dev_dbg(udc_dev(dum), "ep %pK queue req %pK to %s, len %d buf %pK\n",
+	dev_dbg(udc_dev(dum), "ep %p queue req %p to %s, len %d buf %p\n",
 			ep, _req, _ep->name, _req->length, _req->buf);
 #endif
 	_req->status = -EINPROGRESS;
@@ -702,7 +702,7 @@ static int dummy_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 
 	if (retval == 0) {
 		dev_dbg(udc_dev(dum),
-				"dequeued req %pK from %s, len %d buf %pK\n",
+				"dequeued req %p from %s, len %d buf %p\n",
 				req, _ep->name, _req->length, _req->buf);
 		_req->complete(_ep, _req);
 	}
@@ -1727,7 +1727,7 @@ restart:
 		if (!ep) {
 			/* set_configuration() disagreement */
 			dev_dbg(dummy_dev(dum_hcd),
-				"no ep configured for urb %pK\n",
+				"no ep configured for urb %p\n",
 				urb);
 			status = -EPROTO;
 			goto return_urb;
@@ -1742,7 +1742,7 @@ restart:
 		}
 		if (ep->halted && !ep->setup_stage) {
 			/* NOTE: must not be iso! */
-			dev_dbg(dummy_dev(dum_hcd), "ep %s halted, urb %pK\n",
+			dev_dbg(dummy_dev(dum_hcd), "ep %s halted, urb %p\n",
 					ep->ep.name, urb);
 			status = -EPIPE;
 			goto return_urb;
@@ -1759,7 +1759,7 @@ restart:
 			list_for_each_entry(req, &ep->queue, queue) {
 				list_del_init(&req->queue);
 				req->req.status = -EOVERFLOW;
-				dev_dbg(udc_dev(dum), "stale req = %pK\n",
+				dev_dbg(udc_dev(dum), "stale req = %p\n",
 						req);
 
 				spin_unlock(&dum->lock);
@@ -2252,7 +2252,7 @@ static inline ssize_t show_urb(char *buf, size_t size, struct urb *urb)
 	int ep = usb_pipeendpoint(urb->pipe);
 
 	return snprintf(buf, size,
-		"urb/%pK %s ep%d%s%s len %d/%d\n",
+		"urb/%p %s ep%d%s%s len %d/%d\n",
 		urb,
 		({ char *s;
 		switch (urb->dev->speed) {

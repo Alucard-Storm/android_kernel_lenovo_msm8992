@@ -1,6 +1,6 @@
 /*
 
- * drivers/staging/android/ion/ion.c
+ * drivers/gpu/ion/ion.c
  *
  * Copyright (C) 2011 Google, Inc.
  * Copyright (c) 2011-2015,2017, The Linux Foundation. All rights reserved.
@@ -1980,11 +1980,10 @@ void ion_device_add_heap(struct ion_device *dev, struct ion_heap *heap)
 	up_write(&dev->lock);
 }
 
-int ion_walk_heaps(struct ion_client *client, int heap_id,
-			enum ion_heap_type type, void *data,
+int ion_walk_heaps(struct ion_client *client, int heap_id, void *data,
 			int (*f)(struct ion_heap *heap, void *data))
 {
-	int ret_val = 0;
+	int ret_val = -EINVAL;
 	struct ion_heap *heap;
 	struct ion_device *dev = client->dev;
 	/*
@@ -1993,8 +1992,7 @@ int ion_walk_heaps(struct ion_client *client, int heap_id,
 	 */
 	down_write(&dev->lock);
 	plist_for_each_entry(heap, &dev->heaps, node) {
-		if (ION_HEAP(heap->id) != heap_id ||
-			type != heap->type)
+		if (ION_HEAP(heap->id) != heap_id)
 			continue;
 		ret_val = f(heap, data);
 		break;

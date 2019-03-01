@@ -305,6 +305,8 @@ static int fuse_probe(struct platform_device *pdev)
 	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
 	if (!drvdata)
 		return -ENOMEM;
+	/* Store the driver data pointer for use in exported functions */
+	fusedrvdata = drvdata;
 	drvdata->dev = &pdev->dev;
 	platform_set_drvdata(pdev, drvdata);
 
@@ -367,9 +369,6 @@ static int fuse_probe(struct platform_device *pdev)
 	drvdata->csdev = coresight_register(desc);
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
-
-	/* Store the driver data pointer for use in exported functions */
-	fusedrvdata = drvdata;
 
 	dev_info(dev, "Fuse initialized\n");
 	return 0;

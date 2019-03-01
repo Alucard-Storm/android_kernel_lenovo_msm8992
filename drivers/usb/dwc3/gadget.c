@@ -293,7 +293,6 @@ void dwc3_gadget_giveback(struct dwc3_ep *dep, struct dwc3_request *req,
 		int status)
 {
 	struct dwc3			*dwc = dep->dwc;
-	unsigned int			unmap_after_complete = false;
 	int				i;
 
 	if (req->queued) {
@@ -327,21 +326,13 @@ void dwc3_gadget_giveback(struct dwc3_ep *dep, struct dwc3_request *req,
 	if (req->request.status == -EINPROGRESS)
 		req->request.status = status;
 
-	/*
-	 * NOTICE we don't want to unmap before calling ->complete() if we're
-	 * dealing with a bounced ep0 request. If we unmap it here, we would end
-	 * up overwritting the contents of req->buf and this could confuse the
-	 * gadget driver.
-	 */
-	if (dwc->ep0_bounced && dep->number <= 1) {
+	if (dwc->ep0_bounced && dep->number == 0)
 		dwc->ep0_bounced = false;
-		unmap_after_complete = true;
-	} else {
-		usb_gadget_unmap_request(&dwc->gadget,
-				&req->request, req->direction);
-	}
+	else
+		usb_gadget_unmap_request(&dwc->gadget, &req->request,
+				req->direction);
 
-	dev_dbg(dwc->dev, "request %pK from %s completed %d/%d ===> %d\n",
+	dev_dbg(dwc->dev, "request %p from %s completed %d/%d ===> %d\n",
 			req, dep->name, req->request.actual,
 			req->request.length, status);
 
@@ -349,10 +340,6 @@ void dwc3_gadget_giveback(struct dwc3_ep *dep, struct dwc3_request *req,
 	spin_unlock(&dwc->lock);
 	req->request.complete(&dep->endpoint, &req->request);
 	spin_lock(&dwc->lock);
-
-	if (unmap_after_complete)
-		usb_gadget_unmap_request(&dwc->gadget,
-				&req->request, req->direction);
 }
 
 static const char *dwc3_gadget_ep_cmd_string(u8 cmd)
@@ -395,10 +382,9 @@ int dwc3_send_gadget_generic_command(struct dwc3 *dwc, int cmd, u32 param)
 		if (!(reg & DWC3_DGCMD_CMDACT)) {
 			dev_vdbg(dwc->dev, "Command Complete --> %d\n",
 					DWC3_DGCMD_STATUS(reg));
-			ret = 0;
 			if (DWC3_DGCMD_STATUS(reg))
-				ret = -EINVAL;
-			break;
+				return -EINVAL;
+			return 0;
 		}
 
 		/*
@@ -439,19 +425,9 @@ int dwc3_send_gadget_ep_cmd(struct dwc3 *dwc, unsigned ep,
 		if (!(reg & DWC3_DEPCMD_CMDACT)) {
 			dev_vdbg(dwc->dev, "Command Complete --> %d\n",
 					DWC3_DEPCMD_STATUS(reg));
-			/* SW issues START TRANSFER command to isochronous ep
-			 * with future frame interval. If future interval time
-			 * has already passed when core recieves command, core
-			 * will respond with an error(bit13 in Command complete
-			 * event. Hence return error in this case.
-			 */
-			if (reg & 0x2000)
-				ret = -EAGAIN;
-			else if (DWC3_DEPCMD_STATUS(reg))
-				ret = -EINVAL;
-			else
-				ret = 0;
-			break;
+			if (DWC3_DEPCMD_STATUS(reg))
+				return -EINVAL;
+			return 0;
 		}
 
 		/*
@@ -770,7 +746,7 @@ static int dwc3_gadget_ep_enable(struct usb_ep *ep,
 	int				ret;
 
 	if (!ep || !desc || desc->bDescriptorType != USB_DT_ENDPOINT) {
-		pr_debug("dwc3: invalid parameters. ep=%pK, desc=%pK, DT=%d\n",
+		pr_debug("dwc3: invalid parameters. ep=%p, desc=%p, DT=%d\n",
 			ep, desc, desc ? desc->bDescriptorType : 0);
 		return -EINVAL;
 	}
@@ -892,7 +868,7 @@ static void dwc3_prepare_one_trb(struct dwc3_ep *dep,
 	bool			zlp_appended = false;
 	unsigned		rlen;
 
-	dev_vdbg(dwc->dev, "%s: req %pK dma %08llx length %d%s%s\n",
+	dev_vdbg(dwc->dev, "%s: req %p dma %08llx length %d%s%s\n",
 			dep->name, req, (unsigned long long) dma,
 			length, last ? " last" : "",
 			chain ? " chain" : "");
@@ -1373,7 +1349,7 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 
 	if (req->request.status == -EINPROGRESS) {
 		ret = -EBUSY;
-		dev_err(dwc->dev, "%s: %pK request already in queue",
+		dev_err(dwc->dev, "%s: %p request already in queue",
 					dep->name, req);
 		return ret;
 	}
@@ -1503,7 +1479,7 @@ static int dwc3_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 
 	if (!dep->endpoint.desc) {
 		spin_unlock_irqrestore(&dwc->lock, flags);
-		dev_dbg(dwc->dev, "trying to queue request %pK to disabled %s\n",
+		dev_dbg(dwc->dev, "trying to queue request %p to disabled %s\n",
 				request, ep->name);
 		return -ESHUTDOWN;
 	}
@@ -1515,7 +1491,7 @@ static int dwc3_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 		return dwc->gadget.remote_wakeup ? -EAGAIN : -ENOTSUPP;
 	}
 
-	dev_vdbg(dwc->dev, "queing request %pK to %s length %d\n",
+	dev_vdbg(dwc->dev, "queing request %p to %s length %d\n",
 			request, ep->name, request->length);
 
 	WARN(!dep->direction && (request->length % ep->desc->wMaxPacketSize),
@@ -1562,7 +1538,7 @@ static int dwc3_gadget_ep_dequeue(struct usb_ep *ep,
 			dwc3_stop_active_transfer(dwc, dep->number);
 			goto out1;
 		}
-		dev_err(dwc->dev, "request %pK was not queued to %s\n",
+		dev_err(dwc->dev, "request %p was not queued to %s\n",
 				request, ep->name);
 		ret = -EINVAL;
 		goto out0;
@@ -2509,7 +2485,7 @@ static int __dwc3_cleanup_done_trbs(struct dwc3 *dwc, struct dwc3_ep *dep,
 		 * would help. Lets hope that if this occurs, someone
 		 * fixes the root cause instead of looking away :)
 		 */
-		dev_err(dwc->dev, "%s's TRB (%pK) still owned by HW\n",
+		dev_err(dwc->dev, "%s's TRB (%p) still owned by HW\n",
 				dep->name, trb);
 	count = trb->size & DWC3_TRB_SIZE_MASK;
 
@@ -2550,6 +2526,14 @@ static int __dwc3_cleanup_done_trbs(struct dwc3 *dwc, struct dwc3_ep *dep,
 			s_pkt = 1;
 	}
 
+	/*
+	 * We assume here we will always receive the entire data block
+	 * which we should receive. Meaning, if we program RX to
+	 * receive 4K but we receive only 2K, we assume that's all we
+	 * should receive and we simply bounce the request back to the
+	 * gadget driver for further processing.
+	 */
+	req->request.actual += req->request.length - count;
 	if (s_pkt)
 		return 1;
 	if ((event->status & DEPEVT_STATUS_LST) &&
@@ -2569,7 +2553,6 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 	struct dwc3_trb		*trb;
 	unsigned int		slot;
 	unsigned int		i;
-	int			count = 0;
 	int			ret;
 
 	do {
@@ -2598,8 +2581,6 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 				slot++;
 			slot %= DWC3_TRB_NUM;
 			trb = &dep->trb_pool[slot];
-			count += trb->size & DWC3_TRB_SIZE_MASK;
-
 
 			ret = __dwc3_cleanup_done_trbs(dwc, dep, req, trb,
 					event, status);
@@ -2618,15 +2599,6 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 					(trb->ctrl & DWC3_TRB_CTRL_IOC))
 				ret = 1;
 		}
-
-		/*
-		 * We assume here we will always receive the entire data block
-		 * which we should receive. Meaning, if we program RX to
-		 * receive 4K but we receive only 2K, we assume that's all we
-		 * should receive and we simply bounce the request back to the
-		 * gadget driver for further processing.
-		 */
-		req->request.actual += req->request.length - count;
 		dwc3_gadget_giveback(dep, req, status);
 
 		/* EP possibly disabled during giveback? */

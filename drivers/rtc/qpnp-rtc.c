@@ -666,7 +666,7 @@ static int qpnp_rtc_probe(struct spmi_device *spmi)
 	}
 
 	/* Init power_on_alarm after adding rtc device */
-	//power_on_alarm_init();
+	power_on_alarm_init();
 
 	/* Request the alarm IRQ */
 	rc = request_any_context_irq(rtc_dd->rtc_alarm_irq,

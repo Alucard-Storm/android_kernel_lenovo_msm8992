@@ -4149,6 +4149,10 @@ eHalStatus sme_SetBssHotlist (tHalHandle hHal,
 eHalStatus sme_ResetBssHotlist (tHalHandle hHal,
                              tSirExtScanResetBssidHotlistReqParams *pResetReq);
 
+eHalStatus
+sme_set_ssid_hotlist(tHalHandle hal,
+		     struct sir_set_ssid_hotlist_request *request);
+
 /* ---------------------------------------------------------------------------
     \fn sme_SetSignificantChange
     \brief  SME API to set significant change
@@ -4261,6 +4265,11 @@ eHalStatus sme_SetLinkLayerStatsIndCB
 );
 
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
+
+eHalStatus sme_fw_mem_dump(tHalHandle hHal, void *recvd_req);
+eHalStatus sme_fw_mem_dump_register_cb(tHalHandle hHal,
+    void (*callback_routine)(void *cb_context, struct fw_dump_rsp *rsp));
+eHalStatus sme_fw_mem_dump_unregister_cb(tHalHandle hHal);
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 /*--------------------------------------------------------------------------

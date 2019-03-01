@@ -286,7 +286,7 @@ retry:
         else
         {
             pr_err("%s:%s:(i2c write error =%d)\n",LOG_TAG_KERNEL ,__FUNCTION__,err);
-    }
+        }
     }
 #ifdef CWMCU_MUTEX
     mutex_unlock(&i2c_access_mutex);
@@ -2054,32 +2054,33 @@ static ssize_t peel_irc_get(struct device *dev, struct device_attribute *attr, c
     uint8_t ir_report[10];
     int i = 0,j=0;
     int loops = 0;
-	uint16_t checksum = 0;
-	int remainder = 0;
+    uint16_t checksum = 0;
+    int remainder = 0;
 
-	memset(sensor->temp_ReportData, 0, sizeof(uint8_t)*2048); 
 
-	length = sensor->ir_data_length ;
+    memset(sensor->temp_ReportData, 0, sizeof(uint8_t)*2048); 
+    memset(buf, 0, sizeof(uint8_t)*4096); 
+    length = sensor->ir_data_length ;
 
-       if(sensor->ir_ReportData[0] == 2 )  {
-		printk("--CWMCU-- %s, read learning data buf addr=%p %x %x length=%d\n", __func__, buf,sensor->ir_ReportData[2],sensor->ir_ReportData[3],length);
-       	} else if(sensor->ir_ReportData[0] == 1 )  {
-       		length = 2;
-       		printk("--CWMCU-- %s, read learning status buf addr=%p %x %x length=%d\n", __func__, buf,sensor->ir_ReportData[2],sensor->ir_ReportData[3],length);
-       	}else {
-       		printk("--CWMCU-- %s, addr=%p %x %x length=%d\n", __func__, buf,sensor->ir_ReportData[2] ,sensor->ir_ReportData[3],length);
-       	}
-	//kernel header takes 7 bytes already
-	if(length >2041)  length = 2041;
-	memcpy(sensor->temp_ReportData+7,sensor->ir_ReportData,sizeof(uint8_t)*length);
+    if(sensor->ir_ReportData[0] == 2 )  {
+        printk("--CWMCU-- %s, read learning data buf addr=%p %x %x length=%d\n", __func__, buf,sensor->ir_ReportData[2],sensor->ir_ReportData[3],length);
+    } else if(sensor->ir_ReportData[0] == 1 )  {
+        length = 2;
+        printk("--CWMCU-- %s, read learning status buf addr=%p %x %x length=%d\n", __func__, buf,sensor->ir_ReportData[2],sensor->ir_ReportData[3],length);
+    }else {
+        printk("--CWMCU-- %s, addr=%p %x %x length=%d\n", __func__, buf,sensor->ir_ReportData[2] ,sensor->ir_ReportData[3],length);
+    }
+    //kernel header takes 7 bytes already
+    if(length >2041)  length = 2041;
+    memcpy(sensor->temp_ReportData+7,sensor->ir_ReportData,sizeof(uint8_t)*length);
 	
     for (i = 0; i < length; i++) {
            checksum += (uint16_t)sensor->temp_ReportData[i+7];
     }
 		
-	sensor->temp_ReportData[0]=0x4C;
-	sensor->temp_ReportData[1]=0x01; 
-	sensor->temp_ReportData[2]=(length>>8) & 0xFF;//sensor->ir_ReportData[2];
+    sensor->temp_ReportData[0]=0x4C;
+    sensor->temp_ReportData[1]=0x01; 
+    sensor->temp_ReportData[2]=(length>>8) & 0xFF;//sensor->ir_ReportData[2];
     sensor->temp_ReportData[3]=length & 0xFF;//sensor->ir_ReportData[3];
 	sensor->temp_ReportData[4]=(uint8_t) ((checksum >> 8) & 0x00FF);
 	sensor->temp_ReportData[5]=(uint8_t) (checksum & 0x00FF);
@@ -2089,7 +2090,8 @@ static ssize_t peel_irc_get(struct device *dev, struct device_attribute *attr, c
 	remainder =  (length+7)%10;
 	for (j = 0; j < loops ; j++) {
 		memcpy(ir_report,sensor->temp_ReportData+offset,sizeof(uint8_t)*10);
-		len += sprintf(buf + len, "%x %x %x %x %x %x %x %x %x %x ",
+		//For peel: remove the space between each char
+		len += sprintf(buf + len, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
 		ir_report[0],ir_report[1],ir_report[2],ir_report[3],ir_report[4],
 		ir_report[5],ir_report[6],ir_report[7],ir_report[8],ir_report[9]);
 		offset += 10;
@@ -2097,8 +2099,10 @@ static ssize_t peel_irc_get(struct device *dev, struct device_attribute *attr, c
 	
 	if(remainder) {
 		memcpy(ir_report,sensor->temp_ReportData+offset,sizeof(uint8_t)*10);
-		for (j =0 ; j < remainder;j++)
-			len += sprintf(buf + len, "%x ", ir_report[j]);
+		for (j =0 ; j < remainder;j++) {
+			//For peel: remove the space between each char
+			len += sprintf(buf + len, "%02x", ir_report[j]);
+		}
 		//printk("--CWMCU-- remainder=%d len=%d\n", remainder, len);
 	}
 	printk("--CWMCU-- length=%d loops=%d remainder=%d offset=%d len=%d\n", length, loops,remainder,offset, len);
@@ -2112,9 +2116,9 @@ static ssize_t peel_irc_set(struct device *dev, struct device_attribute *attr, c
 {
     struct CWMCU_T *sensor = dev_get_drvdata(dev);
     int i,j;
-    int index = 0, loops = 0;
-
-    char *pch;
+    int index = 0, loops = 0, retry = 15;
+    //space removed change 
+    char ch[3]={0,0,0}; //char *pch;
     char *inBuf= sensor->source;
 
     uint8_t irPacket[128]={0,};
@@ -2122,29 +2126,48 @@ static ssize_t peel_irc_set(struct device *dev, struct device_attribute *attr, c
     
     uint8_t checksum = 0;
     uint8_t irstatus = 0;
-    int offset = 0;
+    int offset = 0,length = 0;
     
     printk("--CWMCU-- %s in buf addr=%p\n", __func__, buf);
-    //0x53  0x54    0x11    A0  A1  B0  B1  0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00    C1  C2 =>17byte
+    //0x53  0x54    0x11    A0  A1  B0  B1  0x00    0x00    0x00    0x00 0x00    0x00    0x00    0x00    C1  C2 =>17byte
     //0x53  0x54    0x22    Data0   Data1   ... ... Data(n)     n=A1A0  
     //0x53  0x54    0x33
-
-    strcpy(sensor->source, buf);
-    
+    memset(sensor->source, 0,  sizeof(uint8_t)*4096); 
+    strncpy(sensor->source, buf,sizeof(uint8_t)*4095);
+       
     printk("--CWMCU-- %s , source: %s\n", __func__, sensor->source);
-	memset(sensor->irInputData, 0, sizeof(uint8_t)*2048);  //zhujp2 add 0506
-    
-	while ((pch = strsep(&inBuf, ", ")) != NULL) {
+    memset(sensor->irInputData, 0, sizeof(uint8_t)*2048);  //zhujp2 add 0506
+
+#if 0 
+    while ((pch = strsep(&inBuf, ", ")) != NULL) {
         sscanf(pch, "%x", &sensor->temp[index]);
         printk("--CWMCU-- %s , sensor->temp[index]: %d, %x\n", __func__, sensor->temp[index], sensor->temp[index]);
         sensor->irInputData[index] = (uint8_t)sensor->temp[index];
         index++;
     }
-    printk("--CWMCU-- %s , index: %d\n", __func__, index);
-
+    printk("--CWMCU-- %s , index: %d \n", __func__, index);
+#else
+	//space removed change
+    length =strlen(inBuf);
+    if(length < 14) {
+        printk("data length must contain the header length 14 at least %s    %d \n", __func__, index);
+        return count;
+    }
+    length = length + length%2;
+    for (i =0; i <length ;i = i+2) {
+        strncpy(ch, inBuf+i, 2);
+        sscanf(ch, "%x", &sensor->temp[index]);
+        printk("--CWMCU-- %s , sensor->temp[index]: %d, %x\n", __func__, sensor->temp[index], sensor->temp[index]);
+        sensor->irInputData[index] = (uint8_t)sensor->temp[index];
+        index++;
+    }
+    printk("--CWMCU-- %s , %d index: %d \n", __func__, i,index);
+	i = 0;
+    offset = 0;
+#endif
     power_pin_sw(sensor,SWITCH_POWER_ENABLE, 1);
-	
-	    //Get IR learning status
+
+    //Get IR learning status
     if(sensor->irInputData[0]==0x50 && sensor->irInputData[6]==0x4C && sensor->irInputData[7]==0x01) {
         printk("--CWMCU-- %s , 0x01\n", __func__);
         if(CWMCU_I2C_R(sensor, RegMapR_PEELIRLearnStatus, irGetData, 4) < 0) {
@@ -2153,8 +2176,8 @@ static ssize_t peel_irc_set(struct device *dev, struct device_attribute *attr, c
 
         memset(sensor->ir_ReportData,0,sizeof(uint8_t)*2048);
 		
-		sensor->ir_data_length = 4;
-
+	    sensor->ir_data_length = 4; 
+		
         //IR learning reply
         if(irGetData[1] == 0) {
            
@@ -2190,7 +2213,19 @@ static ssize_t peel_irc_set(struct device *dev, struct device_attribute *attr, c
 	
     if(sensor->irInputData[0]==0x50 && sensor->irInputData[6]==0x4C && sensor->irInputData[7]==0x02) {
         printk("--CWMCU-- %s , 0x02\n", __func__);
-		sensor->ir_data_length = ((uint16_t)sensor->irInputData[2] << 8) | (uint16_t)sensor->irInputData[3]; 
+        sensor->ir_data_length = ((uint16_t)sensor->irInputData[2] << 8) | (uint16_t)sensor->irInputData[3]; 
+         // Double check if sensor hub is busy
+         while ( retry  > 0) {
+                memset(irGetData, 0,sizeof(uint8_t)*20);
+                if(CWMCU_I2C_R(sensor, RegMapR_PEELIRLearnStatus, irGetData, 4) < 0) {
+                    printk("--CWMCU-- write IR send learning start fail. [i2c]\n");
+                }
+                if(irGetData[1] == 0 ) 
+                    break;              
+                retry--;
+                msleep(200); 
+        }
+        printk("--CWMCU-- Get IR Status : %x retry =%d\n",irGetData[1],(15-retry));
         memset(irPacket,0,sizeof(uint8_t)*128);
         loops = (sensor->ir_data_length / 124) + 1;
         printk("--CWMCU-- %s , loop:%d ir_data_length:%d\n", __func__, loops, sensor->ir_data_length);
@@ -2223,11 +2258,14 @@ static ssize_t peel_irc_set(struct device *dev, struct device_attribute *attr, c
 		
 		if(i == loops)
 		{
-         memset(irPacket,0,sizeof(uint8_t)*128);
-         irPacket[0] = 1;
-         if(CWMCU_I2C_W(sensor, RegMapW_PEELSendIRGo, irPacket, 1) < 0) {
-            printk("--CWMCU-- write IR data fail. [i2c]\n");
-         }
+                    memset(irPacket,0,sizeof(uint8_t)*128);
+                    irPacket[0] = 1;
+                    if(CWMCU_I2C_W(sensor, RegMapW_PEELSendIRGo, irPacket, 1) < 0) {
+                        printk("--CWMCU-- write IR data fail. [i2c]\n");
+                     }else {
+                        printk("--CWMCU-- write IR RegMapW_PEELSendIRGo  [i2c]\n");
+                        msleep(100);
+                     }
 		}
     }
 
@@ -2298,7 +2336,7 @@ static ssize_t peel_irc_set(struct device *dev, struct device_attribute *attr, c
 
 	//Test with Buf0
 	if(sensor->irInputData[0]==0x50 && sensor->irInputData[6]==0x4C && sensor->irInputData[7]==0x06) {
-		printk("--CWMCU-- %s , 0x02\n", __func__);
+		printk("--CWMCU-- %s , 0x06\n", __func__);
 		sensor->ir_data_length = sizeof(Buf0);//((uint16_t)sensor->irInputData[2] << 8) | (uint16_t)sensor->irInputData[3]; 
 		memset(irPacket,0,sizeof(uint8_t)*128);
 		loops = (sensor->ir_data_length / 124) + 1;

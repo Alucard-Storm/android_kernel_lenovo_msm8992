@@ -111,9 +111,6 @@
 
 #define MAX_CHANNEL (NUM_2_4GHZ_CHANNELS + NUM_5GHZ_CHANNELS)
 
-#define IS_CHANNEL_VALID(channel) ((channel >= 0 && channel < 15) \
-                     || (channel >= 36 && channel <= 184))
-
 typedef struct {
    u8 element_id;
    u8 len;
@@ -219,16 +216,13 @@ enum qca_nl80211_vendor_subcmds {
     QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_INFO = 61,
     /* Start Wifi Logger */
     QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_START = 62,
-
-    /* FW Memory Dump feature is deprecated */
-
+    /* Start Wifi Memory Dump */
+    QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_MEMORY_DUMP = 63,
     QCA_NL80211_VENDOR_SUBCMD_ROAM = 64,
-
-    /*
-     * APIs corresponding to the sub commands 65-68 are deprecated.
-     * These sub commands are reserved and not supposed to be used
-     * for any other purpose
-     */
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_SET_SSID_HOTLIST = 65,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_RESET_SSID_HOTLIST = 66,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND = 67,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST = 68,
     QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_SET_LIST = 69,
     QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_SET_PASSPOINT_LIST = 70,
     QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_RESET_PASSPOINT_LIST = 71,
@@ -333,8 +327,17 @@ enum qca_nl80211_vendor_subcmds_index {
     QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_PASSPOINT_NETWORK_FOUND_INDEX,
 #endif /* FEATURE_WLAN_EXTSCAN */
 
+#ifdef FEATURE_WLAN_EXTSCAN
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_SET_SSID_HOTLIST_INDEX,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_RESET_SSID_HOTLIST_INDEX,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND_INDEX,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST_INDEX,
+#endif
     /* OCB events */
     QCA_NL80211_VENDOR_SUBCMD_DCC_STATS_EVENT_INDEX,
+#ifdef WLAN_FEATURE_MEMDUMP
+    QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_MEMORY_DUMP_INDEX,
+#endif /* WLAN_FEATURE_MEMDUMP */
     QCA_NL80211_VENDOR_SUBCMD_MONITOR_RSSI_INDEX,
 #ifdef WLAN_FEATURE_NAN_DATAPATH
     QCA_NL80211_VENDOR_SUBCMD_NDP_INDEX,
@@ -783,6 +786,10 @@ enum qca_wlan_vendor_attr_extscan_results
     /* Unsigned 32bit value; a EXTSCAN Capabilities attribute. */
     QCA_WLAN_VENDOR_ATTR_EXTSCAN_RESULTS_CAPABILITIES_MAX_NUM_WHITELISTED_SSID,
 
+    /* EXTSCAN attributes for
+     * QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND sub-command &
+     * QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST sub-command
+     */
     /* Use attr QCA_WLAN_VENDOR_ATTR_EXTSCAN_NUM_RESULTS_AVAILABLE
      * to indicate number of results.
      */
@@ -1294,8 +1301,6 @@ enum qca_wlan_vendor_attr_pno_config_params {
 	 */
 	QCA_WLAN_VENDOR_ATTR_EPNO_BAND5GHZ_BONUS = 22,
 
-        /* Unsigned 32-bit value, representing the PNO Request ID */
-        QCA_WLAN_VENDOR_ATTR_PNO_CONFIG_REQUEST_ID = 23,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_PNO_AFTER_LAST,
@@ -1492,6 +1497,7 @@ enum qca_wlan_vendor_features {
 
 /**
  * enum wifi_logger_supported_features - values for supported logger features
+ * @WIFI_LOGGER_MEMORY_DUMP_SUPPORTED - Memory dump of FW
  * @WIFI_LOGGER_PER_PACKET_TX_RX_STATUS_SUPPORTED - Per packet statistics
  * @WIFI_LOGGER_CONNECT_EVENT_SUPPORTED - Logging of Connectivity events
  * @WIFI_LOGGER_POWER_EVENT_SUPPORTED - Power of driver
@@ -1499,6 +1505,7 @@ enum qca_wlan_vendor_features {
  * @WIFI_LOGGER_WATCHDOG_TIMER_SUPPORTED - monitor FW health
  */
 enum wifi_logger_supported_features {
+	WIFI_LOGGER_MEMORY_DUMP_SUPPORTED = (1 << (0)),
 	WIFI_LOGGER_PER_PACKET_TX_RX_STATUS_SUPPORTED = (1 << (1)),
 	WIFI_LOGGER_CONNECT_EVENT_SUPPORTED = (1 << (2)),
 	WIFI_LOGGER_POWER_EVENT_SUPPORTED = (1 << (3)),

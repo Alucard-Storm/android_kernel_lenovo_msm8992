@@ -1672,8 +1672,6 @@ static int ip6_route_del(struct fib6_config *cfg)
 				continue;
 			if (cfg->fc_metric && cfg->fc_metric != rt->rt6i_metric)
 				continue;
-			if (cfg->fc_protocol && cfg->fc_protocol != rt->rt6i_protocol)
-				continue;
 			dst_hold(&rt->dst);
 			read_unlock_bh(&table->tb6_lock);
 
@@ -2525,9 +2523,7 @@ static int rt6_fill_node(struct net *net,
 	if (iif) {
 #ifdef CONFIG_IPV6_MROUTE
 		if (ipv6_addr_is_multicast(&rt->rt6i_dst.addr)) {
-			int err = ip6mr_get_route(net, skb, rtm, nowait,
-						  portid);
-
+			int err = ip6mr_get_route(net, skb, rtm, nowait);
 			if (err <= 0) {
 				if (!nowait) {
 					if (err == 0)
@@ -2642,7 +2638,7 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh)
 	if (tb[RTA_UID])
 		fl6.flowi6_uid = nla_get_u32(tb[RTA_UID]);
 	else
-		fl6.flowi6_uid = (iif ? (uid_t) -1 : current_uid());
+		fl6.flowi6_uid = (iif ? (uid_t) -1 : from_kuid_munged(current_user_ns(), current_uid()));
 
 	if (iif) {
 		struct net_device *dev;

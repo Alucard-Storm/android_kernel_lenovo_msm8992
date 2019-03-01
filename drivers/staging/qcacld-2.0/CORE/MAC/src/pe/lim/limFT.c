@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -436,6 +436,7 @@ tSirRetStatus limFTPrepareAddBssReq( tpAniSirGlobal pMac,
     tpSirBssDescription bssDescription )
 {
     tpAddBssParams pAddBssParams = NULL;
+    tANI_U8 i;
     tANI_U8 chanWidthSupp = 0;
     tSchBeaconStruct *pBeaconStruct;
 
@@ -465,9 +466,9 @@ tSirRetStatus limFTPrepareAddBssReq( tpAniSirGlobal pMac,
 
     vos_mem_set((tANI_U8 *) pAddBssParams, sizeof( tAddBssParams ), 0);
 
-    limExtractApCapabilities(pMac,
+    limExtractApCapabilities( pMac,
         (tANI_U8 *) bssDescription->ieFields,
-        GET_IE_LEN_IN_BSS(bssDescription->length), pBeaconStruct);
+        limGetIElenFromBssDescription( bssDescription ), pBeaconStruct );
 
     if (pMac->lim.gLimProtectionControl !=
                                     WNI_CFG_FORCE_POLICY_PROTECTION_DISABLE)
@@ -764,6 +765,17 @@ tSirRetStatus limFTPrepareAddBssReq( tpAniSirGlobal pMac,
         }
     }
 
+    //Disable BA. It will be set as part of ADDBA negotiation.
+    for( i = 0; i < STACFG_MAX_TC; i++ )
+    {
+        pAddBssParams->staContext.staTCParams[i].txUseBA    = eBA_DISABLE;
+        pAddBssParams->staContext.staTCParams[i].rxUseBA    = eBA_DISABLE;
+        pAddBssParams->staContext.staTCParams[i].txBApolicy =
+                                                      eBA_POLICY_IMMEDIATE;
+        pAddBssParams->staContext.staTCParams[i].rxBApolicy =
+                                                      eBA_POLICY_IMMEDIATE;
+    }
+
 #if defined WLAN_FEATURE_VOWIFI
     pAddBssParams->maxTxPower = pftSessionEntry->maxTxPower;
 #endif
@@ -846,10 +858,10 @@ void limFillFTSession(tpAniSirGlobal pMac,
    pftSessionEntry->smeSessionId = psessionEntry->smeSessionId;
    pftSessionEntry->transactionId = 0;
 
-   limExtractApCapabilities(pMac,
-         (tANI_U8 *)pbssDescription->ieFields,
-         GET_IE_LEN_IN_BSS(pbssDescription->length),
-         pBeaconStruct);
+   limExtractApCapabilities( pMac,
+         (tANI_U8 *) pbssDescription->ieFields,
+         limGetIElenFromBssDescription( pbssDescription ),
+         pBeaconStruct );
 
    pftSessionEntry->rateSet.numRates = pBeaconStruct->supportedRates.numRates;
    vos_mem_copy(pftSessionEntry->rateSet.rate,
@@ -929,7 +941,7 @@ void limFillFTSession(tpAniSirGlobal pMac,
                                           pftSessionEntry->currentOperChannel );
    localPowerConstraint = regMax;
    limExtractApCapability( pMac, (tANI_U8 *) pbssDescription->ieFields,
-         GET_IE_LEN_IN_BSS(pbssDescription->length),
+         limGetIElenFromBssDescription(pbssDescription),
          &pftSessionEntry->limCurrentBssQosCaps,
          &pftSessionEntry->limCurrentBssPropCap,
          &currentBssUapsd , &localPowerConstraint, pftSessionEntry);
@@ -1693,6 +1705,29 @@ tANI_BOOLEAN limProcessFTUpdateKey(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf )
                        pKeyInfo->bssId);
 
         pAddBssParams->extSetStaKeyParam.sendRsp = FALSE;
+
+        if(pAddBssParams->extSetStaKeyParam.key[0].keyLength == 16)
+        {
+            PELOG1(limLog(pMac, LOG1,
+            FL("BSS key = %02X-%02X-%02X-%02X-%02X-%02X-%02X- "
+            "%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X"),
+            pAddBssParams->extSetStaKeyParam.key[0].key[0],
+            pAddBssParams->extSetStaKeyParam.key[0].key[1],
+            pAddBssParams->extSetStaKeyParam.key[0].key[2],
+            pAddBssParams->extSetStaKeyParam.key[0].key[3],
+            pAddBssParams->extSetStaKeyParam.key[0].key[4],
+            pAddBssParams->extSetStaKeyParam.key[0].key[5],
+            pAddBssParams->extSetStaKeyParam.key[0].key[6],
+            pAddBssParams->extSetStaKeyParam.key[0].key[7],
+            pAddBssParams->extSetStaKeyParam.key[0].key[8],
+            pAddBssParams->extSetStaKeyParam.key[0].key[9],
+            pAddBssParams->extSetStaKeyParam.key[0].key[10],
+            pAddBssParams->extSetStaKeyParam.key[0].key[11],
+            pAddBssParams->extSetStaKeyParam.key[0].key[12],
+            pAddBssParams->extSetStaKeyParam.key[0].key[13],
+            pAddBssParams->extSetStaKeyParam.key[0].key[14],
+            pAddBssParams->extSetStaKeyParam.key[0].key[15]);)
+        }
     }
     return TRUE;
 }

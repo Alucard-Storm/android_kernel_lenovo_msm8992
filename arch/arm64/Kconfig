@@ -109,10 +109,6 @@ config ILLEGAL_POINTER_VALUE
 config STACKTRACE_SUPPORT
 	def_bool y
 
-config ILLEGAL_POINTER_VALUE
-	hex
-	default 0xdead000000000000
-
 config LOCKDEP_SUPPORT
 	def_bool y
 
@@ -712,3 +708,5 @@ endif
 source "lib/Kconfig"
 
 source "arch/arm64/mm/Kconfig"
+
+source "arch/arm64/hotplug/Kconfig"

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, 2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -89,21 +89,6 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 	uint32_t size = a_ctrl->reg_tbl_size, i = 0;
 	struct msm_camera_i2c_reg_array *i2c_tbl = a_ctrl->i2c_reg_tbl;
 	CDBG("Enter\n");
-
-	if (a_ctrl == NULL) {
-		pr_err("failed. actuator ctrl is NULL");
-		return;
-	}
-
-	if (a_ctrl->i2c_reg_tbl == NULL) {
-		pr_err("failed. i2c reg tabl is NULL");
-		return;
-	}
-
-	size = a_ctrl->reg_tbl_size;
-	write_arr = a_ctrl->reg_tbl;
-	i2c_tbl = a_ctrl->i2c_reg_tbl;
-
 	for (i = 0; i < size; i++) {
 		if (write_arr[i].reg_write_type == MSM_ACTUATOR_WRITE_DAC) {
 			value = (next_lens_position <<
@@ -587,12 +572,6 @@ static int32_t msm_actuator_piezo_move_focus(
 	if (num_steps <= 0 || num_steps > MAX_NUMBER_OF_STEPS) {
 		pr_err("num_steps out of range = %d\n",
 			num_steps);
-		return -EFAULT;
-	}
-
-	if (dest_step_position > a_ctrl->total_steps) {
-		pr_err("Step pos greater than total steps = %d\n",
-			dest_step_position);
 		return -EFAULT;
 	}
 
@@ -1246,11 +1225,9 @@ static int32_t msm_actuator_set_param(struct msm_actuator_ctrl_t *a_ctrl,
 
 	if (copy_from_user(&a_ctrl->region_params,
 		(void *)set_info->af_tuning_params.region_params,
-		a_ctrl->region_size * sizeof(struct region_params_t))) {
-		a_ctrl->total_steps = 0;
-		pr_err("Error copying region_params\n");
+		a_ctrl->region_size * sizeof(struct region_params_t)))
 		return -EFAULT;
-	}
+
 	if (a_ctrl->act_device_type == MSM_CAMERA_PLATFORM_DEVICE) {
 		cci_client = a_ctrl->i2c_client.cci_client;
 		cci_client->sid =
@@ -1557,6 +1534,7 @@ static long msm_actuator_subdev_do_ioctl(
 
 	switch (cmd) {
 	case VIDIOC_MSM_ACTUATOR_CFG32:
+		cmd = VIDIOC_MSM_ACTUATOR_CFG;
 		switch (u32->cfgtype) {
 		case CFG_SET_ACTUATOR_INFO:
 			actuator_data.cfgtype = u32->cfgtype;
@@ -1659,14 +1637,11 @@ static long msm_actuator_subdev_do_ioctl(
 		}
 	}
 
-	if (cmd == VIDIOC_MSM_ACTUATOR_CFG32)
-		rc = msm_actuator_subdev_ioctl(sd, VIDIOC_MSM_ACTUATOR_CFG, parg);
-	else
-		rc = msm_actuator_subdev_ioctl(sd, cmd, parg);
+	rc = msm_actuator_subdev_ioctl(sd, cmd, parg);
 
 	switch (cmd) {
 
-	case VIDIOC_MSM_ACTUATOR_CFG32:
+	case VIDIOC_MSM_ACTUATOR_CFG:
 
 		switch (u32->cfgtype) {
 
