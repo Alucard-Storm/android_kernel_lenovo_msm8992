@@ -36,8 +36,8 @@ int fib_default_rule_add(struct fib_rules_ops *ops,
 	r->pref = pref;
 	r->table = table;
 	r->flags = flags;
-	r->uid_start = from_kuid(current_user_ns(), INVALID_UID);
-	r->uid_end = from_kuid(current_user_ns(), INVALID_UID);
+	r->uid_start = INVALID_UID;
+	r->uid_end = INVALID_UID;
 	r->fr_net = hold_net(ops->fro_net);
 
 	/* The lock is not required here, the list in unreacheable
@@ -391,7 +391,7 @@ static int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr* nlh)
 		goto errout_free;
 
 	/* UID start and end must either both be valid or both unspecified. */
-	rule->uid_start = rule->uid_end = from_kuid(current_user_ns(), INVALID_UID);
+	rule->uid_start = rule->uid_end = INVALID_UID;
 	if (tb[FRA_UID_START] || tb[FRA_UID_END]) {
 		if (tb[FRA_UID_START] && tb[FRA_UID_END]) {
 			rule->uid_start = fib_nl_uid(tb[FRA_UID_START]);
@@ -653,15 +653,17 @@ static int dump_rules(struct sk_buff *skb, struct netlink_callback *cb,
 {
 	int idx = 0;
 	struct fib_rule *rule;
+	int err = 0;
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(rule, &ops->rules_list, list) {
 		if (idx < cb->args[1])
 			goto skip;
 
-		if (fib_nl_fill_rule(skb, rule, NETLINK_CB(cb->skb).portid,
-				     cb->nlh->nlmsg_seq, RTM_NEWRULE,
-				     NLM_F_MULTI, ops) < 0)
+		err = fib_nl_fill_rule(skb, rule, NETLINK_CB(cb->skb).portid,
+				       cb->nlh->nlmsg_seq, RTM_NEWRULE,
+				       NLM_F_MULTI, ops);
+		if (err < 0)
 			break;
 skip:
 		idx++;
@@ -670,7 +672,7 @@ skip:
 	cb->args[1] = idx;
 	rules_ops_put(ops);
 
-	return skb->len;
+	return err;
 }
 
 static int fib_nl_dumprule(struct sk_buff *skb, struct netlink_callback *cb)
@@ -686,7 +688,9 @@ static int fib_nl_dumprule(struct sk_buff *skb, struct netlink_callback *cb)
 		if (ops == NULL)
 			return -EAFNOSUPPORT;
 
-		return dump_rules(skb, cb, ops);
+		dump_rules(skb, cb, ops);
+
+		return skb->len;
 	}
 
 	rcu_read_lock();

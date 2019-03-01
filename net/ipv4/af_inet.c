@@ -124,7 +124,7 @@
 
 static inline int current_has_network(void)
 {
-	return in_egroup_p(make_kgid(current_user_ns(), AID_INET)) || capable(CAP_NET_RAW);
+	return in_egroup_p(AID_INET) || capable(CAP_NET_RAW);
 }
 #else
 static inline int current_has_network(void)
@@ -305,6 +305,9 @@ static int inet_create(struct net *net, struct socket *sock, int protocol,
 	if (unlikely(!inet_ehash_secret))
 		if (sock->type != SOCK_RAW && sock->type != SOCK_DGRAM)
 			build_ehash_secret();
+
+	if (protocol < 0 || protocol >= IPPROTO_MAX)
+		return -EINVAL;
 
 	sock->state = SS_UNCONNECTED;
 
@@ -1068,7 +1071,7 @@ static struct inet_protosw inetsw_array[] =
 		.type =       SOCK_DGRAM,
 		.protocol =   IPPROTO_ICMP,
 		.prot =       &ping_prot,
-		.ops =        &inet_dgram_ops,
+		.ops =        &inet_sockraw_ops,
 		.no_check =   UDP_CSUM_DEFAULT,
 		.flags =      INET_PROTOSW_REUSE,
        },
